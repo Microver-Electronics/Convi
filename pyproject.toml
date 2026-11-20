@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "convi"
+version = "0.1.0"
+description = "KiCad 10 to Altium Designer 2026 project converter"
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["kicad", "altium", "eda", "pcb", "converter"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "zstandard>=0.22",   # KiCad embedded files (3D models stored inside .kicad_pcb)
+    "pillow>=10",        # schematic images, screenshots
+]
+
+[project.urls]
+Homepage = "https://github.com/Microver-Electronics/Convi"
+Issues = "https://github.com/Microver-Electronics/Convi/issues"
+Funding = "https://buymeacoffee.com/convi.tool"
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+convi = "convi.cli:main"
+
+[project.gui-scripts]
+convi-gui = "convi.gui:run_gui"
+
+[tool.setuptools.packages.find]
+include = ["convi*"]
+
+[tool.setuptools.package-data]
+convi = ["altium/*.pas"]

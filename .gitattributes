@@ -1,0 +1,8 @@
+# Windows tool: keep CRLF in the working tree for scripts Altium and cmd.exe read
+* text=auto
+*.bat  text eol=crlf
+*.pas  text eol=crlf
+*.py   text eol=crlf
+*.md   text eol=crlf
+*.toml text eol=crlf
+*.png  binary

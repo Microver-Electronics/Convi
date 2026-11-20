@@ -1,0 +1,31 @@
+procedure LR(Tag: String; T: Variant);
+var R: TCoordRect;
+begin
+  R := T.BoundingRectangle;
+  L(Tag + ' loc=' + IntToStr(T.XLocation) + ',' + IntToStr(T.YLocation) + ' BR=' + IntToStr(R.Left) + ',' + IntToStr(R.Bottom) + ',' + IntToStr(R.Right) + ',' + IntToStr(R.Top));
+end;
+procedure Body;
+var Doc, Board, T: Variant;
+begin
+  Doc := CreateNewDocumentFromDocumentKind('PCB');
+  Board := PCBServer.GetCurrentPCBBoard;
+  T := PCBServer.PCBObjectFactory(eTextObject, eNoDimension, eCreate_Default);
+  T.Text := 'HELLO'; T.Layer := eTopOverlay; T.Size := MMsToCoord(1); T.Width := MMsToCoord(0.15);
+  LR('fresh', T);
+  Board.AddPCBObject(T);
+  LR('added', T);
+  T.XLocation := MMsToCoord(50); T.YLocation := MMsToCoord(40);
+  LR('moved', T);
+  T.GraphicallyInvalidate;
+  LR('invalidated', T);
+  try T.UpdateTextPosition; LR('updtextpos', T); except L('no UpdateTextPosition: ' + ExceptionMessage); end;
+  T.BeginModify; T.EndModify;
+  LR('modify', T);
+  T.MoveByXY(MMsToCoord(10), 0);
+  LR('movebyxy', T);
+  T.MoveToXY(MMsToCoord(70), MMsToCoord(40));
+  LR('movetoxy', T);
+  T.Rotation := 90;
+  LR('rot90', T);
+  Client.CloseDocument(Doc);
+end;

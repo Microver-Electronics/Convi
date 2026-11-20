@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Test data and local runs (KiCad demos are downloaded separately)
+testdata/
+output/
+_convi/
+*.log
+devtools/_probe_run/
+
+# Local API dumps of proprietary software: never commit
+devtools/sdk_*.txt
+devtools/*_refs.txt
