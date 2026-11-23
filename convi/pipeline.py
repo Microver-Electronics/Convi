@@ -33,6 +33,7 @@ class ConvertOptions:
     x2: str | None = None
     make_outputs: bool = False       # manufacturing outputs from the house OutJob template (convi/outputs.py)
     outputs: list | None = None      # container names to generate (None: every container of the template)
+    output_template: str = "auto"    # 'auto' (your templates, else built-in), 'builtin' or a folder
 
 
 @dataclass
@@ -693,13 +694,14 @@ def convert(ins: Inspection, out_dir: Path, resolver: ModelResolver, opts: Conve
         say("Preparing manufacturing outputs")
         try:
             from .outputs import drill_table_rows, find_output_templates, prepare
-            tpl = find_output_templates(Path(pf.pro or pf.pcb).parent)
+            tpl = find_output_templates(Path(pf.pro or pf.pcb).parent, choice=opts.output_template)
             plan = prepare(tpl, out_dir, name, out_dir / f"{name}.PcbDoc", pcbc.lm.used_mech(),
                            pcbc.board_size_mm, "DNP" if variants else None, opts.outputs, iss,
                            drill_rows=drill_table_rows(ins.board), copper_layers=len(pcbc.lm.copper))
             if plan is not None:
-                iss.info("outputs", f"Output templates: {tpl.outjob}" +
-                         (f" and {tpl.draftsman}" if tpl.draftsman else " (no Draftsman template)"))
+                iss.info("outputs", ("Output templates: built-in" if tpl.builtin else f"Output templates: {tpl.outjob}") +
+                         ("" if tpl.builtin else (f" and {tpl.draftsman}" if tpl.draftsman else
+                                                  " (no Draftsman template)")))
         except Exception as e:
             plan = None
             iss.warn("outputs", f"Manufacturing outputs could not be prepared: {e}")

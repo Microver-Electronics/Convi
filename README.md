@@ -62,9 +62,9 @@ pad by pad. You get a report that tells you, in numbers, what matches and what (
   in a `DNP` variant (not fitted, out of the BOM).
 - **3D models**: resolved from the project, your folders or KiCad's official library; missing models are
   listed before you convert.
-- **Manufacturing outputs (optional)**: your own Altium Output Job and Draftsman template are retargeted
-  to the converted board and run: Gerber / ODB++ / IPC-2581 / NC drill, BOM, pick and place, PDFs, STEP,
-  netlists and a fabrication drawing with one view per copper layer.
+- **Manufacturing outputs (optional)**: an Altium Output Job and Draftsman template, built in or your own,
+  are retargeted to the converted board and run: Gerber / ODB++ / IPC-2581 / NC drill, BOM, pick and
+  place, PDFs, STEP, netlists and a fabrication drawing with one view per copper layer.
 - **Wizard**: a step-by-step interface (project, check, options, convert, result) with live progress and
   the verification results in numbers.
 - **Honest reporting**: every remaining difference is reported and classified. Convi never changes
@@ -99,6 +99,11 @@ the repository.
 ### Wizard
 
 Double-click **`Convi.bat`** (or run `convi-gui`). The wizard leads through five steps:
+
+<p align="center">
+  <img src="docs/images/wizard_options.png" alt="Wizard: options and manufacturing outputs" width="49%">
+  <img src="docs/images/wizard_result.png" alt="Wizard: verification result" width="49%">
+</p>
 
 1. **Project**: choose the KiCad project folder or its `.kicad_pro` file, or pick one from the list of
    projects in your [workspace](#workspace-optional) (double-click inspects it at once). The output
@@ -155,6 +160,7 @@ convi --version
 | `--no-teardrops` | Skip KiCad teardrop areas (default: converted to copper regions) |
 | `--outputs [all\|NAME,NAME]` | Also generate the [manufacturing outputs](#manufacturing-outputs): every container of the Output Job, or the named ones (e.g. `GERBER,BOM`) |
 | `--list-outputs` | List the containers of the Output Job template and exit |
+| `--output-template auto\|builtin\|DIR` | Which templates: `auto` (default; yours if found, else the built-in ones), `builtin`, or the folder of your own |
 | `--altium PATH` | Path to Altium's `X2.EXE` if it is not found automatically |
 
 Keep the output path free of non-ASCII characters.
@@ -211,10 +217,21 @@ the KiCad paper size.
 
 ## Manufacturing outputs
 
-Convi can add your own Altium Output Job to the converted project and generate the manufacturing package
-with it. No template is included: use the Output Job (and Draftsman drawing) of a finished Altium project
-whose outputs are set up the way you want them. Put the files in the folder named by the
-`CONVI_OUTPUT_TEMPLATES` environment variable, in your sheet templates folder, or in the workspace root:
+Convi can add an Altium Output Job to the converted project and generate the manufacturing package with
+it. A complete template is built in (`convi/templates/outputs`): an Output Job with ten containers and a
+seven-sheet Draftsman fabrication drawing (title page with PCB properties, drill drawing and table, copper
+layers, top and bottom assembly, layer stack legend, realistic views). It was made on a synthetic test board
+and holds no data of any real product.
+
+<p align="center">
+  <img src="docs/images/draftsman_builtin.png" alt="Draftsman drawing of the built-in template (sheets 2 to 7)" width="100%">
+  <br><sub>The built-in Draftsman template on its test board: copper layers, assembly views, layer stack, realistic views.</sub>
+</p>
+
+You can use your own instead: the Output Job (and Draftsman drawing) of a finished Altium project whose
+outputs are set up the way you want them. Put the files in the folder named by the
+`CONVI_OUTPUT_TEMPLATES` environment variable, in your sheet templates folder, or in the workspace root;
+when Convi finds them they are the default, and the built-in template stays selectable:
 
 ```text
 <Board>.OutJob             the Output Job; its file name is the template project's name
@@ -233,8 +250,9 @@ Convi copies them into the converted project and adapts everything that belonged
 - Draftsman: one layer view per copper layer (sheets are added as needed), board views scaled to fit their
   frame on the sheet, the drill table sized to the board's hole sizes.
 
-In the wizard, switch on *Generate manufacturing outputs* and tick the containers you want; on the command
-line use `--outputs` or `--outputs GERBER,BOM`. Files go to `Project Outputs` in the output folder; the
+In the wizard, choose the *Template* (yours, built-in, or another folder), switch on *Generate manufacturing
+outputs* and tick the containers you want; on the command line use `--outputs` or `--outputs GERBER,BOM`,
+with `--output-template builtin` or `--output-template DIR` to choose the templates. Files go to `Project Outputs` in the output folder; the
 Output Job keeps all its containers, so the others can be run from Altium later.
 
 ## Output and verification report

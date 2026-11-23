@@ -2,7 +2,7 @@
 
 The tool lives in a workspace with three top-level folders::
 
-    <CONVI>/Tool/Convi_R1          this tool
+    <CONVI>/Tool/Convi             this tool
     <CONVI>/Projects/<Name>/...    KiCad source projects (one folder or repository per project)
     <CONVI>/Outputs/convi_out/...  everything Convi writes (one folder per conversion)
 

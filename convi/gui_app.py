@@ -685,8 +685,8 @@ class App(ctk.CTk):
         tv.grid_rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(tv, columns=("model", "used_by", "status"), show="headings",
                                  selectmode="extended", style="Convi.Treeview")
-        for c, w, t in (("model", 380, "3D model referenced in KiCad"), ("used_by", 170, "Used by"),
-                        ("status", 170, "Status")):
+        for c, w, t in (("model", 300, "3D model referenced in KiCad"), ("used_by", 130, "Used by"),
+                        ("status", 130, "Status")):
             self.tree.heading(c, text=t, anchor="w")
             self.tree.column(c, width=w, stretch=(c == "model"), anchor="w")
         self.tree.tag_configure("missing", foreground=AMBER)
@@ -899,12 +899,12 @@ class App(ctk.CTk):
         oc = card(row)
         oc.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
         oc.grid_columnconfigure(0, weight=1)
-        oc.grid_rowconfigure(2, weight=1)
+        oc.grid_rowconfigure(3, weight=1)
         h = ctk.CTkFrame(oc, fg_color="transparent")
         h.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 4))
         h.grid_columnconfigure(0, weight=1)
         label(h, "Manufacturing outputs", 15, TXT, "bold").grid(row=0, column=0, sticky="w")
-        label(h, "Runs your OutJob template after the conversion and adds the OutJob and the Draftsman drawing to the "
+        label(h, "Runs an OutJob template after the conversion and adds the OutJob and the Draftsman drawing to the "
                  "project.", 12, DIM, wraplength=430).grid(row=1, column=0, sticky="w")
         self._build_outputs(oc)
 
@@ -917,38 +917,88 @@ class App(ctk.CTk):
             side="right", padx=14)
 
     def _build_outputs(self, parent):
-        """On/off and one check box per container of the OutJob template."""
-        from .outputs import find_output_templates, list_template_containers
+        """Template choice, on/off and one check box per container of the chosen OutJob template."""
+        from .outputs import builtin_templates, find_output_templates
         self._output_checks = []
-        try:
-            tpl = find_output_templates(Path(__file__).parent)
-            conts = list_template_containers(tpl)
-        except Exception as e:
-            label(parent, f"Output templates could not be read: {e}", 13, AMBER, wraplength=480).grid(
-                row=1, column=0, sticky="w", padx=20, pady=12)
-            return
-        if tpl.outjob is None or not conts:
-            where = tpl.searched[-1] if tpl.searched else "the CONVI folder"
-            label(parent, f"No OutJob template found. Put your .OutJob (and its Draftsman .DwfDot) in {where}.",
-                  13, AMBER, wraplength=480).grid(row=1, column=0, sticky="w", padx=20, pady=12)
-            return
+        self._out_rows = {}
+        self.output_template = "auto"
+        self._out_parent = parent
+        own = find_output_templates(Path(__file__).parent)
+        self._tpl_options: dict[str, str] = {}
+        if own.outjob is not None and not own.builtin:
+            self._tpl_options[f"Your template ({own.outjob.stem})"] = str(own.outjob.parent)
+        if builtin_templates().outjob is not None:
+            self._tpl_options["Built-in template (Convi)"] = "builtin"
+        self._tpl_options["Other folder…"] = "browse"
+        trow = ctk.CTkFrame(parent, fg_color="transparent")
+        trow.grid(row=1, column=0, sticky="ew", padx=20, pady=(10, 0))
+        label(trow, "Template", 12, MUTED).pack(side="left", padx=(0, 10))
+        first = next(iter(self._tpl_options))
+        self.out_tpl_var = tk.StringVar(value=first)
+        self.out_tpl_menu = ctk.CTkOptionMenu(trow, variable=self.out_tpl_var, values=list(self._tpl_options),
+                                              command=self._template_changed, height=34, font=F(13), fg_color=BTN,
+                                              button_color=BTN_H, button_hover_color=LINE2, dropdown_fg_color=CARD,
+                                              dropdown_hover_color=BTN_H, dropdown_font=F(13), text_color=TXT,
+                                              corner_radius=9, dynamic_resizing=False, width=300)
+        self.out_tpl_menu.pack(side="left", fill="x", expand=True)
         top = ctk.CTkFrame(parent, fg_color="transparent")
-        top.grid(row=1, column=0, sticky="ew", padx=20, pady=(10, 8))
+        top.grid(row=2, column=0, sticky="ew", padx=20, pady=(10, 8))
         switch(top, "Generate manufacturing outputs", self.make_outputs, self._outputs_state).pack(side="left")
+        self._out_buttons = []
         for text, val in (("None", False), ("All", True)):
-            b = secondary(top, text, lambda val=val: self._set_all_outputs(val), width=56, height=32)
-            b.pack(side="right", padx=(6, 0))
-            self._output_checks.append(b)
+            bt = secondary(top, text, lambda val=val: self._set_all_outputs(val), width=56, height=32)
+            bt.pack(side="right", padx=(6, 0))
+            self._out_buttons.append(bt)
         self.out_count = label(top, "", 12, MUTED)
         self.out_count.pack(side="right", padx=8)
-        grid = ctk.CTkFrame(parent, fg_color="transparent")
-        grid.grid(row=2, column=0, sticky="new", padx=(16, 16), pady=(0, 14))
-        grid.grid_columnconfigure((0, 1), weight=1, uniform="oc")
+        self._out_grid = ctk.CTkFrame(parent, fg_color="transparent")
+        self._out_grid.grid(row=3, column=0, sticky="new", padx=(16, 16), pady=(0, 14))
+        self._out_grid.grid_columnconfigure((0, 1), weight=1, uniform="oc")
+        if self._tpl_options[first] == "browse":   # no template at all: wait for the user to pick a folder
+            self._output_checks = list(self._out_buttons)
+            label(self._out_grid, "No OutJob template found. Choose the folder of your .OutJob (and its Draftsman "
+                                  ".DwfDot) under Template.", 13, AMBER, wraplength=430).grid(
+                row=0, column=0, columnspan=2, sticky="w", padx=4, pady=8)
+            self.out_tpl_var.set("")
+            self._outputs_state()
+        else:
+            self._template_changed(first)
+
+    def _template_changed(self, value):
+        """Show the containers of the chosen template."""
+        from .outputs import find_output_templates, list_template_containers
+        choice = self._tpl_options.get(value, "auto")
+        if choice == "browse":
+            d = filedialog.askdirectory(title="Folder with your .OutJob (and its Draftsman .DwfDot)")
+            if not d:
+                self.out_tpl_var.set(getattr(self, "_last_tpl_value", ""))
+                return
+            key = f"Folder: {Path(d).name}"
+            self._tpl_options = {key: d, **{k: v for k, v in self._tpl_options.items() if not k.startswith("Folder:")}}
+            self.out_tpl_menu.configure(values=list(self._tpl_options))
+            self.out_tpl_var.set(key)
+            value, choice = key, d
+        self._last_tpl_value = value
+        self.output_template = choice
+        for w in self._out_grid.winfo_children():
+            w.destroy()
+        self.output_vars.clear()
         self._out_rows = {}
+        self._output_checks = list(self._out_buttons)
+        try:
+            tpl = find_output_templates(Path(__file__).parent, choice=choice)
+            conts = list_template_containers(tpl)
+        except Exception as e:
+            tpl, conts = None, []
+            label(self._out_grid, f"The template could not be read: {e}", 13, AMBER, wraplength=430).grid(
+                row=0, column=0, columnspan=2, sticky="w", padx=4, pady=8)
+        if tpl is not None and (tpl.outjob is None or not conts):
+            label(self._out_grid, "No .OutJob in this folder.", 13, AMBER, wraplength=430).grid(
+                row=0, column=0, columnspan=2, sticky="w", padx=4, pady=8)
         for k, c in enumerate(conts):
             v = tk.BooleanVar(value=True)
             self.output_vars[c.name] = v
-            f = ctk.CTkFrame(grid, fg_color=CARD2, border_color=LINE, border_width=1, corner_radius=10)
+            f = ctk.CTkFrame(self._out_grid, fg_color=CARD2, border_color=LINE, border_width=1, corner_radius=10)
             f.grid(row=k // 2, column=k % 2, sticky="ew", padx=4, pady=4)
             cb = ctk.CTkCheckBox(f, text=c.name, variable=v, onvalue=True, offvalue=False, font=F(13, "bold"),
                                  text_color=TXT, text_color_disabled=DIM, fg_color=ORANGE, hover_color=ORANGE_H,
@@ -1211,7 +1261,8 @@ class App(ctk.CTk):
                               open_in_altium=self.open_after.get(),
                               placeholder_bodies=self.placeholders.get(),
                               make_outputs=self._selected_outputs()[0],
-                              outputs=self._selected_outputs()[1])
+                              outputs=self._selected_outputs()[1],
+                              output_template=getattr(self, "output_template", "auto"))
         ins, resolver = self.ins, self.resolver
         self.reached = 3
         self.step = 3

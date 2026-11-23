@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - 2026-11-23
+
+* Built-in manufacturing-output templates: an Output Job with ten containers and a seven-sheet Draftsman
+  fabrication drawing, so manufacturing outputs work without a template of your own. Made on a synthetic test
+  board (`devtools/template_board.py`, `devtools/make_builtin_templates.py`); they hold no product data.
+* Template choice: your own templates stay the default when Convi finds them; wizard *Template* list (yours,
+  built-in, other folder) and `--output-template auto|builtin|DIR`.
+* README: wizard screenshots and the built-in Draftsman drawing.
+
 ## 0.2.0 - 2026-11-23
 
 * Manufacturing outputs (optional): your own Altium Output Job and Draftsman template are retargeted to the

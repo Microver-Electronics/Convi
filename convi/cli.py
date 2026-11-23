@@ -102,6 +102,9 @@ def main(argv=None):
                                 "(all containers, or the named ones, e.g. GERBER,BOM); see --list-outputs")
             p.add_argument("--list-outputs", action="store_true",
                            help="list the OutJob template's output containers and exit")
+            p.add_argument("--output-template", default="auto", metavar="auto|builtin|DIR",
+                           help="OutJob / Draftsman templates: auto (yours if found, else the built-in ones), "
+                                "builtin, or the folder of your own")
     sub.add_parser("gui")
     args = ap.parse_args(argv)
     if args.cmd in (None, "gui"):
@@ -111,12 +114,12 @@ def main(argv=None):
     folder = folder if folder.is_dir() else folder.parent
     if args.cmd == "convert" and args.list_outputs:
         from .outputs import find_output_templates, list_template_containers
-        tpl = find_output_templates(folder)
+        tpl = find_output_templates(folder, choice=args.output_template)
         if tpl.outjob is None:
             print("No OutJob template found. Looked in: " + ", ".join(str(d) for d in tpl.searched))
             return 1
-        print(f"OutJob template   : {tpl.outjob}")
-        print(f"Draftsman template: {tpl.draftsman or '-'}")
+        print(f"OutJob template   : {'built-in' if tpl.builtin else tpl.outjob}")
+        print(f"Draftsman template: {'built-in' if tpl.builtin and tpl.draftsman else (tpl.draftsman or '-')}")
         for c in list_template_containers(tpl):
             print(f"  {c.label}")
         return 0
@@ -148,7 +151,8 @@ def main(argv=None):
                           placeholder_bodies=args.placeholder_bodies,
                           make_outputs=bool(args.outputs),
                           outputs=None if args.outputs in (None, "all") else
-                          [x.strip() for x in args.outputs.split(",") if x.strip()])
+                          [x.strip() for x in args.outputs.split(",") if x.strip()],
+                          output_template=args.output_template)
     print("\nConverting (Altium Designer will be used to write the files)...")
     res = convert(ins, Path(args.out), resolver, opts, progress=lambda m: print("  " + m.ljust(70), end="\r"))
     print(" " * 80, end="\r")

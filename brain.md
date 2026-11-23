@@ -185,6 +185,7 @@ exceptions are two small in-place patches of values that scripts cannot set (sec
 | `convi/pcbcheck.py` | PcbDoc read-back comparison, DRC report parsing, pour areas |
 | `convi/layout.py` | CONVI workspace (`Tool/`, `Projects/`, `Outputs/`), `CONVI_WORKSPACE` |
 | `convi/outputs.py`, `convi/altium/outputs.pas` | manufacturing outputs: Output Job / Draftsman retargeting (layers, scales, layer pages, drill table), running the containers |
+| `convi/templates/outputs/` | built-in Output Job + Draftsman template (made on the synthetic board of `devtools/template_board.py`) |
 | `convi/cli.py` | `convi inspect` / `convi convert` (`--outputs`, `--list-outputs`) |
 | `convi/gui.py` | wizard entry (`Convi.bat`): `gui_app.py` (CustomTkinter, the step wizard) or `gui_classic.py` (Tk, when CustomTkinter is missing or `CONVI_GUI=classic`); images in `convi/assets/` |
 | `devtools/` | probes, `try_pcb.py`, `try_sch.py`, `batch.py`, `show.py` |
@@ -420,6 +421,14 @@ Measured on Altium Designer 26.x unless stated otherwise.
   "Missing file". Restart Altium or use another file name.
 * The *Transmission Line Structure* table lists Layer Stack Manager impedance profiles; KiCad has none, so it
   stays empty (profiles are defined by hand in Altium).
+* A Draftsman template caches the whole board it was made for (component designators and parameters, BOM part
+  numbers, realistic-view bitmaps, paths, the publishing computer's name in `ComputerName`). Never ship a
+  template made on a real product. The built-in template is made on a synthetic board: convert
+  `devtools/template_board.py`'s project with outputs (Altium replaces the cache on the first publish),
+  then `devtools/make_builtin_templates.py` neutralises paths and machine parameters and refuses to write on
+  any foreign path, forbidden word or designator.
+* Template choice (`find_output_templates`): `auto` = your templates (`CONVI_OUTPUT_TEMPLATES`, sheet templates
+  folder, workspace root) else the built-in ones; `builtin`; or a folder.
 
 ---
 
@@ -721,14 +730,24 @@ Typical times: 45 s to 340 s per project depending on size (Python about 10 s; t
    fine-pitch slivers (+78 s on one board).
 6. KiCad worksheet (`.kicad_wks`) conversion for projects without a customer template (Altium's standard title
    block shows no Title/Revision).
-7. Manufacturing outputs: run end to end on boards A, C and D (so far offline IR only, section 14, 0.2.0); a
-   neutral example Output Job for users without one.
+7. Manufacturing outputs: run end to end on boards A, C and D (so far offline IR only, section 14, 0.2.0).
 
 ---
 
 ## 14. Log
 
 New entries go on top. Keep entries short; move lasting facts into sections 4 to 12.
+
+### 2026-11-23 Release 0.3.0: built-in output templates
+* Observation: without an Output Job of their own, users got no manufacturing outputs.
+* Change: built-in Output Job + Draftsman template (`convi/templates/outputs`), made on a synthetic 4-layer board
+  (16 parts on both sides, NPTH holes, inner planes). Conversion of that board with outputs: nets 6/6, pins 31/31,
+  ECO 0, BOM 11/11, 10 of 10 containers, 112 files; the refreshed Draftsman drawing shrank from 5.2 MB to 0.43 MB.
+  Template choice in the wizard and `--output-template`.
+* Result: offline, the built-in template retargets to 4 layers (7 sheets) and 8 layers (9 sheets, layer ids 1-7,
+  32) with all 10 containers. In Altium on board B: 10 of 10 containers, 113 files (same as with the original house
+  template), pick and place without DNP parts, Draftsman 7 sheets with board B's data only; no trace of the template
+  board in the Output Job or the drawing.
 
 ### 2026-11-23 Release 0.2.0: manufacturing outputs and new wizard
 * Manufacturing outputs (`convi/outputs.py`, `altium/outputs.pas`, `--outputs`, wizard step 3): facts in section

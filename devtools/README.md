@@ -13,6 +13,8 @@ licensed Altium Designer unless noted otherwise.
 | `show.py <document> [out.png] [--3d]` | Open a document in Altium, zoom to fit and capture the Altium window. |
 | `altium_dlg.py list\|close\|shot out.png` | List, close or capture open Altium dialogs. |
 | `render_fill.py <board> <ref> <pad> <layer> [out.png]` | Render KiCad's copper fill around a pad (no Altium needed). |
+| `template_board.py <out folder>` | Generate the synthetic KiCad board the built-in output templates are made on (needs KiCad's `pcbnew` Python module). |
+| `make_builtin_templates.py <conversion> [--forbid WORD ...]` | Turn a conversion of that board (with manufacturing outputs) into `convi/templates/outputs`; neutral paths, refuses to write anything that could leak data. |
 
 ## Path tokens
 

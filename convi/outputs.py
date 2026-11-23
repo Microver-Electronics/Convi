@@ -1,4 +1,4 @@
-"""Manufacturing outputs: a house OutJob (and Draftsman template) retargeted to the converted board.
+"""Manufacturing outputs: an Output Job (and Draftsman template) retargeted to the converted board.
 
 The templates are an Altium Output Job (.OutJob) and, optionally, a Draftsman template (.DwfDot or
 .PCBDwf), both made for some other board (the "template board").  Convi copies them into the converted
@@ -43,16 +43,47 @@ OUTPUT_LABELS = {
 
 
 # ---------------------------------------------------------------------------------------------- templates
+# Built-in templates: an Output Job and a Draftsman drawing made on a synthetic 4-layer board (no data of
+# a real product).  Used when the user has no templates of their own, or on request.
+BUILTIN_TEMPLATES = Path(__file__).resolve().parent / "templates" / "outputs"
+
+
 @dataclass
 class OutputTemplates:
     outjob: Path | None = None
     draftsman: Path | None = None
     searched: list = field(default_factory=list)
+    builtin: bool = False
+
+    @property
+    def label(self) -> str:
+        if self.outjob is None:
+            return "none"
+        return "built-in" if self.builtin else str(self.outjob.parent)
 
 
-def find_output_templates(*starts: Path) -> OutputTemplates:
-    """The house OutJob and Draftsman template: in CONVI_OUTPUT_TEMPLATES, else the sheet templates folder,
-    else the CONVI workspace root.  The first folder that holds an .OutJob wins."""
+def templates_in(folder: Path) -> OutputTemplates:
+    """The first .OutJob of a folder and its Draftsman template (.DwfDot, else .PCBDwf)."""
+    res = OutputTemplates(searched=[Path(folder)])
+    d = Path(folder)
+    if d.is_dir():
+        jobs = sorted(d.glob("*.OutJob"))
+        if jobs:
+            res.outjob = jobs[0]
+            dw = sorted(d.glob("*.DwfDot")) or sorted(d.glob("*.PCBDwf"))
+            res.draftsman = dw[0] if dw else None
+    return res
+
+
+def builtin_templates() -> OutputTemplates:
+    res = templates_in(BUILTIN_TEMPLATES)
+    res.builtin = res.outjob is not None
+    return res
+
+
+def user_template_dirs(*starts: Path) -> list[Path]:
+    """Where your own templates are looked for: CONVI_OUTPUT_TEMPLATES, the sheet templates folder, the
+    CONVI workspace root."""
     from .convert.sheet_template import find_templates_dir
     from .layout import find_workspace
     dirs: list[Path] = []
@@ -66,18 +97,29 @@ def find_output_templates(*starts: Path) -> OutputTemplates:
         ws = find_workspace(s)
         if ws and ws not in dirs:
             dirs.append(ws)
-    res = OutputTemplates(searched=dirs)
+    return dirs
+
+
+def find_output_templates(*starts: Path, choice: str | None = "auto") -> OutputTemplates:
+    """The OutJob and Draftsman template to use.
+
+    choice 'auto' (default): your own templates (CONVI_OUTPUT_TEMPLATES, else the sheet templates folder,
+    else the CONVI workspace root; the first folder that holds an .OutJob wins), else the built-in ones.
+    'builtin': the built-in templates.  Any other value: a folder (or an .OutJob file) of your own."""
+    if choice == "builtin":
+        return builtin_templates()
+    if choice and choice != "auto":
+        p = Path(choice)
+        return templates_in(p.parent if p.suffix.lower() == ".outjob" else p)
+    dirs = user_template_dirs(*starts)
     for d in dirs:
-        if not d.is_dir():
-            continue
-        jobs = sorted(d.glob("*.OutJob"))
-        if not jobs:
-            continue
-        res.outjob = jobs[0]
-        dw = sorted(d.glob("*.DwfDot")) or sorted(d.glob("*.PCBDwf"))
-        res.draftsman = dw[0] if dw else None
-        break
-    return res
+        t = templates_in(d)
+        if t.outjob is not None:
+            t.searched = dirs
+            return t
+    b = builtin_templates()
+    b.searched = dirs + [BUILTIN_TEMPLATES]
+    return b
 
 
 # ---------------------------------------------------------------------------------------------- OutJob

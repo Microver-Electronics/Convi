@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "convi"
-version = "0.2.0"
+version = "0.3.0"
 description = "KiCad 10 to Altium Designer 2026 project converter"
 readme = "README.md"
 license = { text = "MIT" }
@@ -41,4 +41,4 @@ convi-gui = "convi.gui:run_gui"
 include = ["convi*"]
 
 [tool.setuptools.package-data]
-convi = ["altium/*.pas", "assets/*.png", "assets/*.ico"]
+convi = ["altium/*.pas", "assets/*.png", "assets/*.ico", "templates/outputs/*"]

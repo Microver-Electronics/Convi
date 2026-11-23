@@ -1,6 +1,8 @@
 """Offline tests of the manufacturing outputs module (no Altium, no house templates needed)."""
 import re
 import sys
+
+import pytest
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -189,3 +191,34 @@ def test_one_layer_view_per_copper_layer():
     assert re.search(r"<LayerV7Id>4</LayerV7Id><ShowedLayers><BoardLayerDisplayData><V7LayerId>4</V7LayerId>"
                      r"<Visible>true</Visible>", x)
     assert len(re.findall(r"<Page>", O.expand_layer_pages(doc, 2))) == 1
+
+
+def test_template_choice(tmp_path, monkeypatch):
+    mine = tmp_path / "mine"
+    mine.mkdir()
+    (mine / "A.OutJob").write_text("[OutputJobFile]\n", encoding="utf-8")
+    (mine / "A.DwfDot").write_bytes(b"")
+    t = O.find_output_templates(tmp_path, choice=str(mine))
+    assert (t.outjob.name, t.draftsman.name, t.builtin) == ("A.OutJob", "A.DwfDot", False)
+    assert O.find_output_templates(tmp_path, choice=str(mine / "A.OutJob")).outjob.name == "A.OutJob"
+    monkeypatch.setenv(O.OUTPUT_TEMPLATES_ENV, str(mine))
+    t = O.find_output_templates(tmp_path)
+    assert t.outjob == mine / "A.OutJob" and not t.builtin and t.label == str(mine)
+    assert O.find_output_templates(tmp_path, choice=str(tmp_path / "none")).outjob is None
+
+
+def test_builtin_templates_are_neutral():
+    b = O.builtin_templates()
+    if b.outjob is None:
+        pytest.skip("no built-in templates in this tree")
+    assert b.builtin and b.label == "built-in" and b.draftsman is not None
+    assert O.find_output_templates(choice="builtin").outjob == b.outjob
+    text = b.outjob.read_bytes().decode("utf-8-sig")
+    xml = O.dwf_read(b.draftsman)
+    for doc in (text, xml):
+        for p in set(re.findall(r"[A-Za-z]:\\[^|<>\r\n\"]*", doc)):
+            assert p.upper().startswith("C:\\CONVI\\CONVI_TEMPLATE") or p.upper().startswith("C:\\PROGRAM FILES"), p
+    refs = {r.strip() for r in re.findall(r"<ComponentDesignator>([^<]*)</ComponentDesignator>", xml)} - {""}
+    assert refs <= {"U1", "J1", "R1", "R2", "R3", "R4", "R5", "C1", "C2", "C3", "D1", "TP1", "H1", "H2", "H3", "H4"}
+    names = [c.name for c in O.list_template_containers(b)]
+    assert len(names) >= 10 and "DRAFTSMAN" in names and "GERBER" in names

@@ -4,7 +4,7 @@ The probe file must define `procedure Body;`.  A prelude providing
 `L(msg)` (logging) and a `Main` wrapper is prepended automatically.
 
 Path tokens in a probe body are replaced before the run (no machine-specific paths in the probes):
-  %ROOT%  this tool folder            (<CONVI>/Tool/Convi_R1)
+  %ROOT%  this tool folder            (<CONVI>/Tool/Convi)
   %OUT%   development output folder   (<CONVI>/Outputs/convi_out/_dev)
   %WS%    CONVI workspace root        (<CONVI>)
 """

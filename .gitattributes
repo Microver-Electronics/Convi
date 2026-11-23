@@ -6,3 +6,8 @@
 *.md   text eol=crlf
 *.toml text eol=crlf
 *.png  binary
+*.ico  binary
+# Altium files are kept byte for byte
+*.OutJob binary
+*.DwfDot binary
+*.PCBDwf binary
