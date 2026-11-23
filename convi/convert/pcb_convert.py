@@ -5,7 +5,7 @@ import copy
 import hashlib
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -157,6 +157,8 @@ class PcbConverter:
         self.sch_lib_name = sch_lib_name
         self.symbol_of = symbol_of or {}   # footprint path -> (libref, uniqueid path, description)
         self.relinked: set = set()         # id(fp) of board footprints linked to a symbol by Convi
+        self.des_override: dict[int, str] = {}  # id(fp) -> unique designator for repeated board-only refs
+        self.board_size_mm: tuple | None = None  # outline bounding box (w, h)
         self.net_index: dict[str, int] = {}
         self.fpdefs: dict[str, FootprintDef] = {}
         self.fp_name_of: dict[int, str] = {}   # id(fp) -> def name
@@ -270,6 +272,7 @@ class PcbConverter:
             ir.cmd("NET", i=i, name=an)
         self._emit_outline(ir)
         self._prepare_footprint_defs()
+        self._unique_designators()
         for fp in b.footprints:
             self._emit_component(ir, fp)
         for t in b.tracks:
@@ -362,6 +365,36 @@ class PcbConverter:
         for ml in self.lm.used_mech():
             ir.cmd("MECH", n=ml.number, name=ml.name, kind=MECH_KIND.get(ml.kind, 0), pair=ml.pair or 0)
 
+    def designator(self, fp: Footprint) -> str:
+        """The Altium designator of a footprint: the schematic's, else the board's (made unique)."""
+        if id(fp) in self.des_override:
+            return self.des_override[id(fp)]
+        return (self.symbol_of.get(fp.path, {}) or {}).get("ref") or fp.ref
+
+    def _unique_designators(self):
+        """Board-only footprints that share a reference (KiCad logos are all 'G***') get G1, G2 ...:
+        Altium's Draftsman stops updating its board data on a repeated designator, without a message."""
+        self.des_override = {}
+        count = Counter(self.designator(fp) for fp in self.b.footprints)
+        used = set(count)
+        renamed = []
+        for fp in self.b.footprints:
+            des = self.designator(fp)
+            if (count[des] < 2 and "*" not in des and "?" not in des) or self.symbol_of.get(fp.path):
+                continue
+            prefix = re.sub(r"[^A-Za-z_]", "", des.split("*")[0].split("?")[0]) or "X"
+            k = 1
+            while f"{prefix}{k}" in used:
+                k += 1
+            new = f"{prefix}{k}"
+            used.add(new)
+            self.des_override[id(fp)] = new
+            renamed.append(f"{des} -> {new}")
+        if renamed:
+            self.issues.info("pcb", f"{len(renamed)} board-only footprint(s) share a reference in KiCad and get a "
+                                    "unique Altium designator (Draftsman needs unique designators): "
+                                    + ", ".join(renamed[:20]))
+
     # ------------------------------------------------------------ outline
     def _emit_outline(self, ir: IRWriter):
         edge = [s for s in self.b.shapes if s.layer == "Edge.Cuts"]
@@ -373,6 +406,9 @@ class PcbConverter:
             self.issues.warn("pcb", p)
         if outer is None:
             return
+        pts = OL.contour_points(outer, 0.005)
+        self.board_size_mm = (max(p[0] for p in pts) - min(p[0] for p in pts),
+                              max(p[1] for p in pts) - min(p[1] for p in pts))
         # orient outer CCW in the Altium frame (Y up) == CW in KiCad frame
         segs = self._contour_to_osegs(outer)
         ir.cmd("OUTLINE", n=len(segs))
@@ -499,12 +535,12 @@ class PcbConverter:
         elif "exclude_from_bom" in attrs:
             kind = "standard_nobom"
         sym = self.symbol_of.get(fp.path, {})
-        des = sym.get("ref") or fp.ref
+        des = self.designator(fp)
         if marker_kind(des, fp.lib_id, name):
             # house rule: test points, mounting holes and fiducials are never assembled; a
             # board-only one is graphical (not synchronised: Update PCB leaves it alone)
             kind = "standard_nobom" if sym else "graphical"
-        if des != fp.ref and id(fp) not in self.relinked:
+        if des != fp.ref and id(fp) not in self.relinked and id(fp) not in self.des_override:
             self.issues.info("link", f"Footprint '{fp.ref}' takes the schematic designator '{des}' "
                                      "(the KiCad board was not updated from the schematic)")
         height = self._fp_height(fp)
@@ -531,6 +567,11 @@ class PcbConverter:
                 txt = des
             if which == "name" and id(fp) in self.relinked:
                 show = False      # the KiCad label is kept as a component text (_emit_fp_prims)
+            if which == "comment":
+                # house rule: the part value never shows on the board. KiCad libraries draw it on F.Fab
+                # (shown), so it would land on the assembly layer and in assembly prints; Altium keeps it
+                # as the component Comment (BOM, parameters), hidden like Altium's own libraries do.
+                show = False
             self._text_cmd(ir, "COMPTEXT", t, t.pos, t.angle, lay or ("TO" if not fp.flipped else "BO"),
                            txt, which=which, show=show)
         for k, v in fp.properties.items():

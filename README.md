@@ -34,6 +34,7 @@ pad by pad. You get a report that tells you, in numbers, what matches and what (
 - [Command line reference](#command-line-reference)
 - [3D models](#3d-models)
 - [Sheet templates](#sheet-templates)
+- [Manufacturing outputs](#manufacturing-outputs)
 - [Output and verification report](#output-and-verification-report)
 - [What is converted](#what-is-converted)
 - [Known limitations](#known-limitations)
@@ -57,9 +58,15 @@ pad by pad. You get a report that tells you, in numbers, what matches and what (
   mask/paste, hole rules, KiCad custom rules (`.kicad_dru`), KiCad severities and DRC exclusions.
 - **Copper pours**: zones become Altium polygons, poured in KiCad priority order and compared with
   KiCad's own fill.
-- **BOM and variants**: fields and values preserved; DNP parts in a "KiCad DNP" variant.
+- **BOM and variants**: fields and values preserved; DNP parts, test points, mounting holes and fiducials
+  in a `DNP` variant (not fitted, out of the BOM).
 - **3D models**: resolved from the project, your folders or KiCad's official library; missing models are
   listed before you convert.
+- **Manufacturing outputs (optional)**: your own Altium Output Job and Draftsman template are retargeted
+  to the converted board and run: Gerber / ODB++ / IPC-2581 / NC drill, BOM, pick and place, PDFs, STEP,
+  netlists and a fabrication drawing with one view per copper layer.
+- **Wizard**: a step-by-step interface (project, check, options, convert, result) with live progress and
+  the verification results in numbers.
 - **Honest reporting**: every remaining difference is reported and classified. Convi never changes
   clearances or deletes rules to make a report look clean.
 
@@ -83,23 +90,34 @@ cd Convi
 install.bat
 ```
 
-`install.bat` runs `py -m pip install -e .`, which installs the two dependencies (`zstandard`, `pillow`)
-and the `convi` and `convi-gui` commands. Run it again if you move the folder.
+`install.bat` runs `py -m pip install -e .`, which installs the dependencies (`zstandard`, `pillow`, `lz4`,
+`customtkinter`) and the `convi` and `convi-gui` commands. Run it again if you move the folder or update
+the repository.
 
 ## Quick start
 
 ### Wizard
 
-1. Double-click **`Convi.bat`** (or run `convi-gui`).
-2. Choose the KiCad project folder or its `.kicad_pro` file. The output folder is filled in for you.
-3. Click **1. Inspect**. Convi reads everything and lists what is missing: sub-sheets, 3D models,
-   undefined path variables. On the *Missing files* tab you can add a folder with STEP files, assign a
-   STEP file to a model or define a KiCad path variable, then inspect again.
-4. On the *Convert* tab, check the options and click **2. Convert to Altium**.
-   Altium Designer starts if it is not running. **Do not use Altium until Convi has finished**; typical
-   projects take one to six minutes.
-5. The project opens in Altium. Run *File > Save All* once, then read the report
-   (see [Output and verification report](#output-and-verification-report)).
+Double-click **`Convi.bat`** (or run `convi-gui`). The wizard leads through five steps:
+
+1. **Project**: choose the KiCad project folder or its `.kicad_pro` file, or pick one from the list of
+   projects in your [workspace](#workspace-optional) (double-click inspects it at once). The output
+   folder is filled in for you.
+2. **Check**: Convi reads everything and shows the project in numbers, the 3D models it cannot find and
+   what else it noticed (sub-sheets, undefined path variables, custom rules ...). Add a folder with STEP
+   files, assign a STEP file to selected models or define a KiCad path variable; the project is checked
+   again.
+3. **Options & outputs**: global labels, sheet template, teardrops, placeholder bodies, opening the result
+   in Altium, and the optional [manufacturing outputs](#manufacturing-outputs).
+4. **Convert**: Altium Designer starts if it is not running. **Do not use Altium until Convi has
+   finished**; the stages and a live log are shown. Typical projects take one to six minutes, plus two to
+   four minutes when all manufacturing outputs are generated.
+5. **Result**: the verification in numbers (nets, pins, pads, ECO, BOM, outputs) with the errors, warnings
+   and notes, and buttons for the project, the output folder and the report. Run *File > Save All* in
+   Altium once (see [Output and verification report](#output-and-verification-report)).
+
+Without CustomTkinter installed, or with the environment variable `CONVI_GUI=classic`, the previous
+tabbed wizard starts instead.
 
 ### Command line
 
@@ -135,6 +153,8 @@ convi --version
 | `--sheet-template auto\|none\|CUSTOMER\|FILE.SchDot` | Draw sheets on your Altium templates (see [Sheet templates](#sheet-templates)) |
 | `--placeholder-bodies` | Grey box bodies for parts whose 3D model is missing (never for test points, fiducials, mounting holes, DNP or BOM-excluded parts) |
 | `--no-teardrops` | Skip KiCad teardrop areas (default: converted to copper regions) |
+| `--outputs [all\|NAME,NAME]` | Also generate the [manufacturing outputs](#manufacturing-outputs): every container of the Output Job, or the named ones (e.g. `GERBER,BOM`) |
+| `--list-outputs` | List the containers of the Output Job template and exit |
 | `--altium PATH` | Path to Altium's `X2.EXE` if it is not found automatically |
 
 Keep the output path free of non-ASCII characters.
@@ -189,15 +209,45 @@ and every sheet gets the smallest size of that family it fits on. Title-block va
 drawn by, checked by, ...) are filled from the KiCad project. Without a matching template the sheets keep
 the KiCad paper size.
 
+## Manufacturing outputs
+
+Convi can add your own Altium Output Job to the converted project and generate the manufacturing package
+with it. No template is included: use the Output Job (and Draftsman drawing) of a finished Altium project
+whose outputs are set up the way you want them. Put the files in the folder named by the
+`CONVI_OUTPUT_TEMPLATES` environment variable, in your sheet templates folder, or in the workspace root:
+
+```text
+<Board>.OutJob             the Output Job; its file name is the template project's name
+<Board>.DwfDot             optional: the Draftsman drawing (.DwfDot or .PCBDwf) of that project
+```
+
+Convi copies them into the converted project and adapts everything that belonged to the template board:
+
+- paths, project name and output folders;
+- the `DNP` variant for every output (BOM and pick and place leave out DNP parts, test points, mounting
+  holes and fiducials);
+- mechanical layers, matched by purpose (assembly, courtyard, 3D body, outline), read from the template
+  board's layer names that the Draftsman drawing carries;
+- copper layers: inner layers for Gerber, ODB++ and prints follow the converted board's layer count, and
+  every drill pair the board uses is plotted;
+- Draftsman: one layer view per copper layer (sheets are added as needed), board views scaled to fit their
+  frame on the sheet, the drill table sized to the board's hole sizes.
+
+In the wizard, switch on *Generate manufacturing outputs* and tick the containers you want; on the command
+line use `--outputs` or `--outputs GERBER,BOM`. Files go to `Project Outputs` in the output folder; the
+Output Job keeps all its containers, so the others can be run from Altium later.
+
 ## Output and verification report
 
 ```text
 <output folder>/
-  MyBoard.PrjPcb        project: hierarchical net scope, parameters, "KiCad DNP" variant, ERC matrix
+  MyBoard.PrjPcb        project: hierarchical net scope, parameters, DNP variant, ERC matrix
   *.SchDoc              one per sheet instance, in KiCad page order
   MyBoard.SchLib        all symbols
   MyBoard.PcbDoc        the board, poured
   MyBoard.PcbLib        all footprints with embedded STEP bodies
+  *.OutJob, *.PCBDwf    Output Job and Draftsman drawing (with manufacturing outputs)
+  Project Outputs/      the generated manufacturing files (with manufacturing outputs)
   convi_report.json     the full verification report
   _convi/               logs, DRC report, read-back data, intermediate files
 ```
@@ -247,6 +297,12 @@ The complete mapping, with the reasoning behind each decision, is documented in 
   cross on symbols (Altium shows "Not Fitted" when the variant is active).
 - **Not yet tested** on real projects: blind/buried vias, flex and rigid-flex, hatched pours.
 - Third-party 3D models that existed only on the original designer's computer must be supplied by you.
+- **Manufacturing outputs**: Draftsman's *Transmission Line Structure* table stays empty, because KiCad
+  projects define no Layer Stack Manager impedance profiles. Very wide boards are drawn side by side at a
+  smaller scale; assembly print pages keep the template's scale.
+- **Part values** are not shown on the board, as in Altium's own libraries
+  (they stay in the BOM and the component parameters); the silkscreen keeps the designators and the
+  texts drawn by the designer.
 
 ## Troubleshooting
 
@@ -255,6 +311,8 @@ The complete mapping, with the reasoning behind each decision, is documented in 
 | A dialog appears in Altium during the conversion | Convi handles known dialogs itself; do not click in Altium. If a script error appears, its picture is saved to `_convi/altium_error.png`. |
 | "Cannot convert: fix the blocking problems" | Run `convi inspect` and resolve the listed items (missing sub-sheets, unreadable files). |
 | Many 3D models are missing | Add the folder with the vendor's STEP files (`--models` or the wizard), or define the path variable the footprints use (`--var`). |
+| The wizard looks like a plain tabbed window | CustomTkinter is missing: run `install.bat` again. |
+| "Missing file" when a Draftsman PDF is published | A failed publish can leave a locked, almost empty PDF. Restart Altium, then convert again. |
 | `convi` is not recognised | Run `install.bat` again, or use `py -m convi ...` from the repository folder. |
 | Altium is not found | Pass `--altium` with the path to your version's `X2.EXE`, e.g. `C:\Program Files\Altium\AD26\X2.EXE`. |
 | The result differs from KiCad | Open `convi_report.json`. If the difference is not a known limitation, please open an issue (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
@@ -263,7 +321,7 @@ The complete mapping, with the reasoning behind each decision, is documented in 
 
 ```bat
 py -m pip install -e .[dev]
-py -m pytest -q tests/test_offline.py
+py -m pytest -q tests
 ```
 
 The offline tests need no Altium. Four of them also use KiCad's demo projects in

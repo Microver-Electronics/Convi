@@ -158,7 +158,7 @@ def check(conv, rows, ref_of=None) -> PcbCheck:
                 res.unrouted_count[m.group(1) if m else "?"] += 1
     # ---------------- pads
     for fp in conv.b.footprints:
-        des = (conv.symbol_of.get(fp.path, {}) or {}).get("ref") or fp.ref
+        des = conv.designator(fp)
         for pd in fp.pads:
             cu = [l for l in pd.layers if l.endswith(".Cu")]
             if not cu and pd.type != "np_thru_hole":

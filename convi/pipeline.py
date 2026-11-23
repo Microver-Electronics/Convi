@@ -31,6 +31,8 @@ class ConvertOptions:
     open_in_altium: bool = True
     keep_ir: bool = True
     x2: str | None = None
+    make_outputs: bool = False       # manufacturing outputs from the house OutJob template (convi/outputs.py)
+    outputs: list | None = None      # container names to generate (None: every container of the template)
 
 
 @dataclass
@@ -221,7 +223,8 @@ def _kicad_excluded_pairs(pcbc) -> set:
     excl = ((data.get("board") or {}).get("design_settings") or {}).get("drc_exclusions") or []
     owner = {}
     for fp in pcbc.b.footprints:
-        des = (pcbc.symbol_of.get(fp.path, {}) or {}).get("ref") or fp.ref
+        des = (getattr(pcbc, "des_override", None) or {}).get(id(fp)) or \
+            (pcbc.symbol_of.get(fp.path, {}) or {}).get("ref") or fp.ref
         owner[fp.uuid] = des
         for pd in fp.pads:
             owner[pd.uuid] = des
@@ -685,8 +688,25 @@ def convert(ins: Inspection, out_dir: Path, resolver: ModelResolver, opts: Conve
             n_mark = len(dnp) - n_kicad
             iss.info("variants", f"Variant 'DNP': {len(dnp)} part(s) Not Fitted ({n_kicad} KiCad DNP, {n_mark} test "
                                  "point(s) / mounting hole(s) / fiducial(s), which are also out of the BOM)")
+    plan = None
+    if opts.make_outputs and pcbc is not None:
+        say("Preparing manufacturing outputs")
+        try:
+            from .outputs import drill_table_rows, find_output_templates, prepare
+            tpl = find_output_templates(Path(pf.pro or pf.pcb).parent)
+            plan = prepare(tpl, out_dir, name, out_dir / f"{name}.PcbDoc", pcbc.lm.used_mech(),
+                           pcbc.board_size_mm, "DNP" if variants else None, opts.outputs, iss,
+                           drill_rows=drill_table_rows(ins.board), copper_layers=len(pcbc.lm.copper))
+            if plan is not None:
+                iss.info("outputs", f"Output templates: {tpl.outjob}" +
+                         (f" and {tpl.draftsman}" if tpl.draftsman else " (no Draftsman template)"))
+        except Exception as e:
+            plan = None
+            iss.warn("outputs", f"Manufacturing outputs could not be prepared: {e}")
+    extra_docs = ([plan.outjob.name] + ([plan.draftsman.name] if plan.draftsman else [])) if plan else []
     write_prjpcb(prj, sch_docs, f"{name}.PcbDoc" if pcbc else None, schlib_name if schc else None,
                  pcblib_name if pcbc else None, parameters=ins.settings.text_vars, variants=variants,
+                 extra_docs=extra_docs,
                  hierarchy_mode=schc.hierarchy_mode if schc else 2,
                  allow_port_net_names=schc.allow_port_net_names if schc else False,
                  erc_pin_map=kicad_pin_map(ins.settings.data),
@@ -835,6 +855,22 @@ def convert(ins: Inspection, out_dir: Path, resolver: ModelResolver, opts: Conve
                          ", ".join(f"{lab} {p}" for lab, p in waived[:10]))
         except Exception as e:
             iss.warn("verify", f"PCB check failed: {e}")
+    if plan is not None and plan.containers:
+        say("Altium: generating manufacturing outputs")
+        try:
+            from .outputs import run_outputs
+            orep = run_outputs(plan, prj, out_dir, work, x2=opts.x2, progress=say)
+            res.stats["outputs"] = orep["summary"]
+            for c in orep["failed"]:
+                iss.warn("outputs", f"Output container '{c}' did not finish in Altium (see _convi/outputs.log)")
+            if orep["files"]:
+                iss.info("outputs", orep["summary"])
+            else:
+                iss.warn("outputs", "Altium wrote no output files (see _convi/outputs.log)")
+        except Exception as e:
+            iss.warn("outputs", f"Manufacturing outputs failed: {e}")
+    elif plan is not None:
+        iss.info("outputs", f"{plan.outjob.name} added to the project; no output container was selected to run")
     if opts.open_in_altium:
         from .altium.runner import run_script
         tpl = (Path(__file__).resolve().parent / "altium" / "open_project.pas").read_text(encoding="utf-8")
@@ -850,7 +886,7 @@ def convert(ins: Inspection, out_dir: Path, resolver: ModelResolver, opts: Conve
         shutil.rmtree(work, ignore_errors=True)
     res.seconds = time.time() - t0
     (out_dir / "convi_report.json").write_text(json.dumps({
-        "project": str(prj), "seconds": round(res.seconds, 1), "stats": res.stats,
+        "source": str(pf.folder), "project": str(prj), "seconds": round(res.seconds, 1), "stats": res.stats,
         "issues": [i.__dict__ for i in iss.items],
         "pin_mismatches": comparison.mismatched_pins if comparison else [],
         "shorted_nets": comparison.shorts if comparison else {},

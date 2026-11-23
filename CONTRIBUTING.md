@@ -23,7 +23,7 @@ judged by measured results in Altium and KiCad, not by how plausible it looks.
 
 ## Definition of done
 
-1. `py -m pytest -q tests/test_offline.py` passes (with the KiCad demos in `testdata/kicad-src/demos`
+1. `py -m pytest -q tests` passes (with the KiCad demos in `testdata/kicad-src/demos`
    for the full set).
 2. Offline IR regression (brain.md section 10.3): the IR of the reference projects is unchanged except for
    the intended difference.

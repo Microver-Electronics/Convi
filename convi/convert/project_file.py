@@ -58,8 +58,9 @@ def kicad_pin_map(pro: dict | None) -> list | None:
 def write_prjpcb(path: Path, schdocs: list[str], pcbdoc: str | None, schlib: str | None, pcblib: str | None,
                  parameters: dict | None = None, variants: list | None = None, hierarchy_mode: int = 2,
                  allow_port_net_names: bool = False, cross_refs: bool = False, erc_pin_map: list | None = None,
-                 append_sheet_numbers: bool = False):
-    """schdocs: file names, top sheet first.  variants: [(name, [(designator, uid_path)...])]"""
+                 append_sheet_numbers: bool = False, extra_docs: list[str] | None = None):
+    """schdocs: file names, top sheet first.  variants: [(name, [(designator, uid_path)...])].
+    extra_docs: further project documents (the OutJob and Draftsman drawing of the manufacturing outputs)."""
     lines = [
         "[Design]",
         "Version=1.0",
@@ -111,6 +112,7 @@ def write_prjpcb(path: Path, schdocs: list[str], pcbdoc: str | None, schlib: str
         "",
     ]
     docs = list(schdocs) + ([pcbdoc] if pcbdoc else []) + ([schlib] if schlib else []) + ([pcblib] if pcblib else [])
+    docs += list(extra_docs or [])
     for i, d in enumerate(docs, 1):
         lines += [
             f"[Document{i}]",

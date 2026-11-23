@@ -54,7 +54,8 @@ A conversion is **correct** when all of the following hold:
 1. **Connectivity**: every KiCad pad net equals the Altium compiled net, pin by pin.
 2. **ECO preview** (what *Design > Update PCB* would do): `add 0, remove 0, re-link 0, footprint 0, pad-net 0`.
 3. **Geometry read-back**: every pad (position and net), track, arc and via of the saved PcbDoc equals KiCad.
-4. **BOM**: parts, values and fields equal KiCad; DNP parts are in a "KiCad DNP" variant.
+4. **BOM**: parts, values and fields equal KiCad; DNP parts, test points, mounting holes and fiducials are
+   in a `DNP` variant (not fitted, out of the BOM).
 5. **DRC**: Altium reports nothing that KiCad's own DRC would not report on the same board. Remaining
    violations are named in the report as KiCad's (warnings, exclusions, real design facts).
 6. **ERC**: only the warnings KiCad's design also implies (in practice: "no driving source").
@@ -102,8 +103,8 @@ These rules come from real mistakes. Follow them strictly.
   document the condition that triggers it.
 
 ### 2.3 Definition of done for a change
-1. Offline tests pass: `py -m pytest -q tests/test_offline.py` (31 tests with the KiCad demos in
-   `testdata/kicad-src/demos`; 4 are skipped without them).
+1. Offline tests pass: `py -m pytest -q tests` (`test_offline.py`: 31 tests with the KiCad demos in
+   `testdata/kicad-src/demos`, 4 skipped without them; `test_outputs.py`: 9 tests).
 2. Offline IR regression (section 10.3): the IR of every reference project is byte-identical to the
    previous version, except for the intended change.
 3. A real conversion of at least one affected project, checked in Altium (connectivity, ECO, DRC, ERC,
@@ -151,7 +152,11 @@ exceptions are two small in-place patches of values that scripts cannot set (sec
 9. Separate pour pass (`repour.pas`), optional unused-via-pad removal (`unusedpads.pas`), board check
    (`pcbcheck.pas`: read-back + DRC), pour refinement (`_refine_pours`, section 7.3).
 10. Final verify: compile and read the PcbDoc back, then the ECO preview.
-11. Open the project in Altium; write `convi_report.json` (work files and logs in `_convi/`).
+11. Optional manufacturing outputs (section 4.8): the Output Job and Draftsman templates are retargeted
+    before the final `.PrjPcb` is written (they become project documents) and run after the checks
+    (`outputs.pas`).
+12. Open the project in Altium; write `convi_report.json` (work files and logs in `_convi/`; the report
+    records the KiCad source folder as `source`).
 
 ### 3.2 File map
 | Path | Role |
@@ -179,9 +184,11 @@ exceptions are two small in-place patches of values that scripts cannot set (sec
 | `convi/verify.py` | netlist parsing, KiCad/Altium comparison, BOM comparison, ECO preview |
 | `convi/pcbcheck.py` | PcbDoc read-back comparison, DRC report parsing, pour areas |
 | `convi/layout.py` | CONVI workspace (`Tool/`, `Projects/`, `Outputs/`), `CONVI_WORKSPACE` |
-| `convi/cli.py`, `convi/gui.py` | `convi inspect` / `convi convert`, Tk wizard (`Convi.bat`) |
+| `convi/outputs.py`, `convi/altium/outputs.pas` | manufacturing outputs: Output Job / Draftsman retargeting (layers, scales, layer pages, drill table), running the containers |
+| `convi/cli.py` | `convi inspect` / `convi convert` (`--outputs`, `--list-outputs`) |
+| `convi/gui.py` | wizard entry (`Convi.bat`): `gui_app.py` (CustomTkinter, the step wizard) or `gui_classic.py` (Tk, when CustomTkinter is missing or `CONVI_GUI=classic`); images in `convi/assets/` |
 | `devtools/` | probes, `try_pcb.py`, `try_sch.py`, `batch.py`, `show.py` |
-| `tests/test_offline.py` | offline tests (no Altium needed) |
+| `tests/test_offline.py`, `tests/test_outputs.py` | offline tests (no Altium needed) |
 
 ### 3.3 IR format (`convi/altium/ir.py`)
 UTF-8 with BOM, one command per line, TAB-separated `key=value`. PCB coordinates are integer Altium
@@ -381,6 +388,39 @@ Measured on Altium Designer 26.x unless stated otherwise.
   edit in the `Additional` stream.
 * Rule: patch only closed documents, only same-size edits, and verify that Altium opens the result.
 
+### 4.8 Output jobs and Draftsman (manufacturing outputs)
+* Run a container: `WorkspaceManager:GenerateReport` with `Action=Run|ObjectKind=OutputBatch|OutputMedium=<name>`
+  (generated files) or `WorkspaceManager:Print` with `Action=PublishToPDF|...|DisableDialog=True` (PDF
+  containers). The Output Job must be the active document.
+* `WorkspaceManager:CloseObject ObjectKind=Document` closes the focused document, not the named one: close with
+  `Client.CloseDocument`.
+* Template paths in an Output Job are absolute (`DocumentPath=`, `OutputFilePath`): all are rewritten. Every
+  `OutputVariantName` / `VariantName` is set to the project's `DNP` variant (pick and place ignored the variant
+  otherwise); `OpenOutput*` and `PromptOverwrite*` off.
+* Gerber `Plot.Set` layer ids: Mechanical N = 16908288 + N, Top = 16777217, Mid N = 16777217 + N, Bottom =
+  16842751. A 4-layer template plots Mid 1 and Mid 2 only: its inner entries are expanded to Mid 1 .. Mid n-2 of the
+  board. Template drill pairs are named after the template's layers (`Top Layer`): `PlotUsedDrill*LayerPairs=True`,
+  else no drill drawing / guide files. ODB++: `PlotMechanicalNPlot` and `Plot_V7_k_name`. Print items use
+  `Layer=MechanicalN`.
+* Mechanical layers are matched by purpose: template names come from the Draftsman cache (V7 id: M1-16 = 56 + N,
+  M17+ = 67108864 + N), board roles from the layer kinds Convi assigned.
+* Draftsman files (`.PCBDwf` / `.DwfDot`) are LZ4 blocks of DataContract XML. Locations are bottom-left, y up, in
+  1/96 inch (A3 = 1587.4 x 1122.5); text items carry a `<Rect>`; the drill table grows upwards from its
+  Location; realistic views have explicit Width/Height. Every absolute PcbDoc path (the document's and each view's
+  `BoardSourceName`) must be rewritten. Caches must stay (empty caches crash Altium).
+* Layer views: `LayerV7Id` (Top 1, Mid k = 1 + k, Bottom 32); `LayerV6Id` is 1 in every template view, leave it.
+  `ShowedLayers` entries are `<BoardLayerDisplayData><Color>..</Color><V7LayerId>n</V7LayerId><Visible>..`;
+  an entry inserted without `<Color>` crashed Altium when the drawing was opened.
+* Publishing the Output Job updates the drawing's board data by itself (about 2-3 min), but the first PDF still
+  placed the drill view by the template board: publish, save, close and publish again (`outputs.pas`, line
+  `refresh`) gives correct pages.
+* Draftsman stops updating its board data silently on a repeated designator (KiCad logos are all `G***`): board-only
+  footprints that share a reference get unique designators (section 6.3).
+* A failed Draftsman publish leaves a 17-byte PDF that stays locked; every later publish to that file fails with
+  "Missing file". Restart Altium or use another file name.
+* The *Transmission Line Structure* table lists Layer Stack Manager impedance profiles; KiCad has none, so it
+  stays empty (profiles are defined by hand in Altium).
+
 ---
 
 ## 5. Verified KiCad facts
@@ -471,8 +511,12 @@ Do not copy KiCad's look (KiCad ground triangles drawn as signal ground, carets 
 
 ### 6.3 PCB
 * Footprints not linked to a symbol (logos, mounting holes) -> Graphical/Mechanical component kind; symbols "not
-  on board" -> Mechanical; DNP -> variant "KiCad DNP".
-* PCB designator = schematic designator when the KiCad board is stale (e.g. `REF**`).
+  on board" -> Mechanical; DNP, test points, mounting holes and fiducials -> variant `DNP`.
+* PCB designator = schematic designator when the KiCad board is stale (e.g. `REF**`). Board-only footprints that
+  share a reference (logos `G***`, `REF**`) get unique designators (`G1`, `G2` ...; the report lists them).
+* Part values are never shown on the board: KiCad library footprints draw the Value on F.Fab (shown), which put
+  every value on the assembly layer and in assembly prints. The value stays the component Comment (BOM,
+  parameters), hidden as in Altium's own libraries.
 * Zones -> polygons (pour order by priority, then UUID, descending); keep-outs -> keep-out regions per layer;
   teardrops -> regions; dimensions -> plain graphics; tables -> texts + lines. Barcodes and images -> reported.
 * A filled copper rectangle/polygon whose stroke is below max(board minimum track width, 0.05 mm) becomes the region
@@ -660,6 +704,9 @@ Typical times: 45 s to 340 s per project depending on size (Python about 10 s; t
 * Floating directives from schematic rule-area net-class flags (an Altium blanket would be exact; blanket API untested).
 * PcbLib rule checks run through an automation bridge may report "origin outside the footprint" on every footprint
   (the bridge does not subtract the library origin); placement on the board is exact.
+* Manufacturing outputs: the Draftsman *Transmission Line Structure* table stays empty (no impedance profiles in
+  KiCad); very wide boards are placed side by side at a smaller scale; assembly print pages keep the template's
+  scale; Draftsman BOM / variant settings are left as in the template.
 
 ---
 
@@ -674,12 +721,29 @@ Typical times: 45 s to 340 s per project depending on size (Python about 10 s; t
    fine-pitch slivers (+78 s on one board).
 6. KiCad worksheet (`.kicad_wks`) conversion for projects without a customer template (Altium's standard title
    block shows no Title/Revision).
+7. Manufacturing outputs: run end to end on boards A, C and D (so far offline IR only, section 14, 0.2.0); a
+   neutral example Output Job for users without one.
 
 ---
 
 ## 14. Log
 
 New entries go on top. Keep entries short; move lasting facts into sections 4 to 12.
+
+### 2026-11-23 Release 0.2.0: manufacturing outputs and new wizard
+* Manufacturing outputs (`convi/outputs.py`, `altium/outputs.pas`, `--outputs`, wizard step 3): facts in section
+  4.8. Checked in Altium on boards B (4 layers), E (4 layers, wide panel), F and G (8 layers): 10 of 10 containers,
+  113 to 133 files, Gerber with all inner layers and drill files, BOM and pick and place without DNP parts,
+  Draftsman with one view per copper layer (B 7 sheets, G 9 sheets). Run time +2.5 to 4 min with all containers.
+* Conversion changes: part values hidden on the board; unique designators for repeated board-only references
+  (section 6.3). Offline IR of the earlier R1 code vs 0.2.0 on boards A, C, D: only the hidden comments differ
+  (0, 575 and 1 lines); geometry, rules and libraries identical.
+* Regression in Altium on B, E, F, G (0.2.0 vs R1 conversions): connectivity, ECO, BOM, read-back, DRC classes,
+  object counts and rules identical; new report lines are the intended ones only.
+* Wizard: CustomTkinter step wizard (project, check, options and outputs, convert, result), the old Tk wizard kept as
+  fallback. Pages are built when first needed. Do not call `withdraw()` on the window before `mainloop()`: on Windows
+  CustomTkinter then never shows the window (it hides the window itself until the main loop starts).
+* New dependencies: `lz4` (Draftsman; a slow pure-Python fallback is built in), `customtkinter`.
 
 ### 2026-11-20 Release R1
 * State: all reference boards converted and checked in Altium. ERC only "no driving source"; connectivity, BOM and

@@ -97,6 +97,11 @@ def main(argv=None):
             p.add_argument("--no-teardrops", action="store_true", help="skip KiCad teardrop areas")
             p.add_argument("--placeholder-bodies", action="store_true",
                            help="grey box bodies for parts whose 3D model is missing")
+            p.add_argument("--outputs", nargs="?", const="all", metavar="all|NAME,NAME",
+                           help="also generate the manufacturing outputs of your OutJob template "
+                                "(all containers, or the named ones, e.g. GERBER,BOM); see --list-outputs")
+            p.add_argument("--list-outputs", action="store_true",
+                           help="list the OutJob template's output containers and exit")
     sub.add_parser("gui")
     args = ap.parse_args(argv)
     if args.cmd in (None, "gui"):
@@ -104,6 +109,17 @@ def main(argv=None):
         return run_gui()
     folder = Path(args.project).resolve()
     folder = folder if folder.is_dir() else folder.parent
+    if args.cmd == "convert" and args.list_outputs:
+        from .outputs import find_output_templates, list_template_containers
+        tpl = find_output_templates(folder)
+        if tpl.outjob is None:
+            print("No OutJob template found. Looked in: " + ", ".join(str(d) for d in tpl.searched))
+            return 1
+        print(f"OutJob template   : {tpl.outjob}")
+        print(f"Draftsman template: {tpl.draftsman or '-'}")
+        for c in list_template_containers(tpl):
+            print(f"  {c.label}")
+        return 0
     if not args.out:
         args.out = str(default_out_dir(folder))
     resolver = _resolver(args, folder)
@@ -129,7 +145,10 @@ def main(argv=None):
     opts = ConvertOptions(global_labels=args.global_labels, x2=args.altium,
                           sheet_template=args.sheet_template,
                           teardrops="skip" if args.no_teardrops else "regions",
-                          placeholder_bodies=args.placeholder_bodies)
+                          placeholder_bodies=args.placeholder_bodies,
+                          make_outputs=bool(args.outputs),
+                          outputs=None if args.outputs in (None, "all") else
+                          [x.strip() for x in args.outputs.split(",") if x.strip()])
     print("\nConverting (Altium Designer will be used to write the files)...")
     res = convert(ins, Path(args.out), resolver, opts, progress=lambda m: print("  " + m.ljust(70), end="\r"))
     print(" " * 80, end="\r")

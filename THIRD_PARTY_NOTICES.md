@@ -8,7 +8,9 @@ third-party source code, libraries, models or data files. The items below are us
 | Package | Purpose | License |
 |---|---|---|
 | [zstandard](https://pypi.org/project/zstandard/) | reading files embedded in KiCad 9/10 boards | BSD-3-Clause |
-| [Pillow](https://pypi.org/project/pillow/) | schematic images, window captures | MIT-CMU (HPND) |
+| [Pillow](https://pypi.org/project/pillow/) | schematic images, window captures, wizard images | MIT-CMU (HPND) |
+| [lz4](https://pypi.org/project/lz4/) | reading and writing Altium Draftsman documents (manufacturing outputs) | BSD-3-Clause |
+| [CustomTkinter](https://pypi.org/project/customtkinter/) | the wizard's user interface | MIT |
 | [pytest](https://pypi.org/project/pytest/) (development only) | offline tests | MIT |
 
 ## KiCad library 3D models

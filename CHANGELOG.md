@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.0 - 2026-11-23
+
+* Manufacturing outputs (optional): your own Altium Output Job and Draftsman template are retargeted to the
+  converted board (paths, DNP variant, mechanical layers by purpose, inner copper layers, drill pairs, one
+  Draftsman view per copper layer, views scaled to their frames) and run after the conversion. Wizard step
+  *Options & outputs*, command line `--outputs [all|NAME,NAME]` and `--list-outputs`.
+* New wizard: five steps (project, check, options and outputs, convert, result) with the workspace project list,
+  live stages and log, and the verification results in numbers. The previous Tk wizard stays as a fallback
+  (`CONVI_GUI=classic`).
+* Part values are no longer shown on the board (they stay in the BOM and the component parameters).
+* Board-only footprints that share a reference (e.g. logos `G***`) get unique designators.
+* `convi_report.json` records the KiCad source folder.
+* New dependencies: `lz4`, `customtkinter` (run `install.bat` again after updating).
+* `Convi.bat` keeps the window open when Convi stops with an error.
+
 ## 0.1.0 (R1) - 2026-11-20
 
 First public release.

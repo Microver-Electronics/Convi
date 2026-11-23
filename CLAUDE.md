@@ -20,7 +20,7 @@ Commands:
 
 ```bat
 py -m pip install -e .[dev]
-py -m pytest -q tests/test_offline.py
+py -m pytest -q tests
 convi inspect <kicad project>
 convi convert <kicad project> -y
 py devtools/probe.py devtools/probes/<probe>.pas
