@@ -16,6 +16,7 @@ var
   HConnTY     : Double;
   FontCache   : TStringList;
   IsLib       : Boolean;
+  AccessErr   : Boolean;    { UpdatePrimitivesAccessibility failed once (reported once) }
 
 procedure FinishSpecific;
 begin
@@ -25,6 +26,21 @@ procedure InitSpecific;
 begin
   FontCache := TStringList.Create;
   InSComp := False;
+  AccessErr := False;
+end;
+
+{ Mark the symbol's graphics, texts and pins as part of the symbol (ISNOTACCESIBLE=T in the file,
+  as Altium writes for every placed or library symbol). Without it a click picks a single line or
+  arc and drags it out of the part. Altium's own KiCad importer makes the same call.
+  Probe: devtools/probes/p67_access.pas. }
+procedure LockPrimitives(C: Variant);
+begin
+  try
+    C.UpdatePrimitivesAccessibility;
+  except
+    if not AccessErr then Err('symbol primitives stay selectable one by one: ' + ExceptionMessage);
+    AccessErr := True;
+  end;
 end;
 
 function MX(K: String): Integer;
@@ -371,6 +387,7 @@ end;
 procedure DoLCompEnd;
 begin
   InSComp := False;
+  LockPrimitives(CurSComp);
   SchDoc.AddSchComponent(CurSComp);
   CountStat('symbol');
 end;
@@ -481,6 +498,7 @@ begin
   InSComp := False;
   CurSComp.SetState_OrientationWithoutRotating(VI('orient', 0));
   CurSComp.IsMirrored := VB('mirror');
+  LockPrimitives(CurSComp);
   CurSComp.GraphicallyInvalidate;
   CountStat('component');
 end;

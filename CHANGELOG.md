@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 - 2026-11-23
+
+* Schematic symbols are built as one piece: a click on a line, arc or pin of a part selects the whole part, with
+  its selection box around the symbol, as for parts placed from an Altium library. Before, single lines could
+  be dragged out of a part. Applies to the placed parts and to the generated schematic library.
+
 ## 0.3.0 - 2026-11-23
 
 * Built-in manufacturing-output templates: an Output Job with ten containers and a seven-sheet Draftsman

@@ -340,6 +340,11 @@ Measured on Altium Designer 26.x unless stated otherwise.
   `\SheetSymbolUID\UID` (that still varies the BOM but ERC reports "Incorrect link in project variant"). Convi
   takes the variant path from the compile.
 * `PartCount` must be set before `CurrentPartID`.
+* Symbol primitives must be marked as part of the symbol. Altium writes `ISNOTACCESIBLE=T` on every graphic and
+  label of a placed part and of a library symbol, and bit 0x20 in a pin's `PINCONGLOMERATE`.
+  `ISch_Component.UpdatePrimitivesAccessibility` (also called by Altium's own KiCad importer) sets both. Without it a
+  click picks one line or arc and drags it out of the part, and the selection box covers only part of the symbol
+  (probe `p67_access.pas`).
 * Altium takes all parts of a component from one library component.
 * Pin text fonts: `Name_FontMode/Designator_FontMode := ePinItemMode_Custom` + custom font IDs; name offset via
   `Name_PositionMode` + `Name_CustomPosition_Margin`.
@@ -737,6 +742,17 @@ Typical times: 45 s to 340 s per project depending on size (Python about 10 s; t
 ## 14. Log
 
 New entries go on top. Keep entries short; move lasting facts into sections 4 to 12.
+
+### 2026-11-23 Release 0.3.1: symbols as one piece
+* Observation (board B): a click on a symbol line selected and moved that line alone, and a part was selected with
+  a small box in one corner. A schematic drawn in Altium carries the "part of the symbol" marks on every symbol
+  graphic and pin; Convi's symbols carried none.
+* Change: `builder_sch.pas` calls `UpdatePrimitivesAccessibility` at the end of every placed part and every library
+  symbol; a failure is reported once and does not stop the build.
+* Result: probe p67 (same symbol without/with the call) - only the part with the call is selected whole. Board B
+  converted again: 332 of 332 symbol graphics and 360 of 360 pins marked, 150 of 150 library graphics; free sheet
+  graphics (392) untouched; apart from the marks and the random pin ids the sheets are record for record the same
+  as before; report unchanged, no new issue.
 
 ### 2026-11-23 Release 0.3.0: built-in output templates
 * Observation: without an Output Job of their own, users got no manufacturing outputs.

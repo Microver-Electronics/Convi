@@ -563,3 +563,13 @@ def test_templates_folder_is_found_by_pattern_or_environment(tmp_path, monkeypat
     other.mkdir()
     monkeypatch.setenv("CONVI_TEMPLATES", str(other))
     assert find_templates_dir(prj) == other                    # the environment variable wins
+
+
+def test_symbols_are_built_as_one_piece():
+    """Placed parts and library symbols get their primitives marked as part of the symbol
+    (Altium writes ISNOTACCESIBLE=T); without it a click picks one line and drags it out."""
+    s = (ROOT / "convi" / "altium" / "builder_sch.pas").read_text()
+    body = lambda name: s[s.index("procedure " + name + ";"):].split("\nend;", 1)[0]
+    for proc in ("DoCEnd", "DoLCompEnd"):
+        assert "LockPrimitives(CurSComp)" in body(proc), proc
+    assert "UpdatePrimitivesAccessibility" in body("LockPrimitives(C: Variant)")
